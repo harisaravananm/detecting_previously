@@ -1,0 +1,34 @@
+{
+  "autoencoder": {
+    "f1": 0.9383,
+    "precision": 0.8838,
+    "recall": 1.0,
+    "fpr": 0.0575,
+    "tp": 3500,
+    "fp": 460,
+    "tn": 7540,
+    "fn": 0,
+    "auc_roc": 1.0
+  },
+  "isolation_forest": {
+    "f1": 0.4654,
+    "precision": 0.7333,
+    "recall": 0.3409,
+    "fpr": 0.0542,
+    "tp": 1193,
+    "fp": 434,
+    "tn": 7566,
+    "fn": 2307,
+    "auc_roc": 0.8688
+  },
+  "one_class_svm": {
+    "f1": 0.936,
+    "precision": 0.8796,
+    "recall": 1.0,
+    "fpr": 0.0599,
+    "tp": 3500,
+    "fp": 479,
+    "tn": 7521,
+    "fn": 0
+  }
+}

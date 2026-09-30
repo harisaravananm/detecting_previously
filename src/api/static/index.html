@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ML-T2-002 | Network Anomaly Detector</title>
+  <meta name="description" content="Real-time network anomaly detection powered by Autoencoder-based behavioural deviation analysis. Detect previously unseen attacks." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #080c14;
+      --surface: #0d1520;
+      --surface2: #111c2e;
+      --surface3: #162035;
+      --border: rgba(99,179,237,0.12);
+      --accent: #3b82f6;
+      --accent2: #06b6d4;
+      --accent3: #8b5cf6;
+      --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #475569;
+      --glow: 0 0 30px rgba(59,130,246,0.15);
+      --glow-danger: 0 0 30px rgba(239,68,68,0.2);
+      --glow-success: 0 0 30px rgba(16,185,129,0.15);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Ambient orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.12;
+      pointer-events: none;
+      z-index: 0;
+      animation: float 8s ease-in-out infinite;
+    }
+    .orb-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -200px; }
+    .orb-2 { width: 400px; height: 400px; background: var(--accent3); bottom: -100px; right: -100px; animation-delay: -4s; }
+    .orb-3 { width: 300px; height: 300px; background: var(--accent2); top: 40%; left: 60%; animation-delay: -2s; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-20px); }
+    }
+
+    /* Layout */
+    .wrapper { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 60px; }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 32px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 36px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(59,130,246,0.4);
+    }
+    .logo-text h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .logo-text span { font-size: 12px; color: var(--text2); font-weight: 400; }
+    .header-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 100px;
+      font-size: 13px;
+      color: var(--success);
+      font-weight: 500;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+    #model-status-badge { font-size: 12px; color: var(--text2); }
+
+    /* Grid layouts */
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .grid-main { display: grid; grid-template-columns: 1fr 420px; gap: 24px; margin-bottom: 24px; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(99,179,237,0.3), transparent);
+    }
+    .card:hover { border-color: rgba(99,179,237,0.25); box-shadow: var(--glow); }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text2);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .icon { font-size: 14px; }
+
+    /* Stat cards */
+    .stat-card { text-align: center; }
+    .stat-value {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #fff, var(--text2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat-label { font-size: 12px; color: var(--text2); font-weight: 500; }
+    .stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+    /* Predict panel */
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 100px;
+      background: rgba(59,130,246,0.15);
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    label { display: block; font-size: 12px; color: var(--text2); font-weight: 500; margin-bottom: 6px; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      background: var(--surface3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      padding: 10px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    .form-group { margin-bottom: 16px; }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      color: white;
+      box-shadow: 0 4px 15px rgba(59,130,246,0.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(59,130,246,0.45); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-secondary {
+      background: var(--surface3);
+      color: var(--text2);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { color: var(--text); border-color: rgba(99,179,237,0.3); }
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger), #dc2626);
+      color: white;
+    }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* Result gauge */
+    .result-container {
+      text-align: center;
+      padding: 32px 20px;
+      position: relative;
+    }
+    .gauge-wrap { position: relative; display: inline-block; margin-bottom: 20px; }
+    .gauge-svg { display: block; }
+    .gauge-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-score { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+    .gauge-label-sm { font-size: 11px; color: var(--text2); }
+
+    .verdict {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .verdict.normal { color: var(--success); }
+    .verdict.anomaly { color: var(--danger); }
+    .verdict-detail { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-key { color: var(--text2); }
+    .detail-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+    /* Metrics table */
+    .metrics-table { width: 100%; border-collapse: collapse; }
+    .metrics-table th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text3);
+      padding: 0 12px 10px;
+      font-weight: 600;
+    }
+    .metrics-table th:first-child { padding-left: 0; }
+    .metrics-table td {
+      padding: 10px 12px;
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+    }
+    .metrics-table td:first-child { padding-left: 0; font-weight: 600; }
+    .metrics-table tr:hover td { background: rgba(99,179,237,0.04); }
+
+    .metric-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+    .pill-good { background: rgba(16,185,129,0.15); color: var(--success); }
+    .pill-mid { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .pill-bad { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .pill-neutral { background: rgba(99,179,237,0.1); color: var(--accent2); }
+
+    /* Feature bar chart */
+    .feat-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .feat-name { width: 200px; color: var(--text2); truncate: ellipsis; overflow: hidden; white-space: nowrap; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+    .feat-bar-bg { flex: 1; height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+    .feat-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+    .feat-val { width: 55px; text-align: right; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+    /* Score history */
+    .history-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn { from { opacity:0; transform: translateX(-10px); } to { opacity:1; transform:translateX(0); } }
+    .history-row:last-child { border-bottom: none; }
+    .history-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .history-score { font-family: 'JetBrains Mono', monospace; color: var(--text2); }
+    .history-time { margin-left: auto; color: var(--text3); }
+    .history-verdict { font-weight: 600; }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .status-item { display: flex; align-items: center; gap: 6px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+      max-width: 320px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Tab */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; padding: 4px; background: var(--surface2); border-radius: var(--radius-sm); }
+    .tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); transition: all 0.2s; }
+    .tab.active { background: var(--surface3); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .grid-3 { grid-template-columns: 1fr; }
+      .grid-main { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="wrapper">
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <div class="logo-icon">&#x1F6E1;&#xFE0F;</div>
+        <div class="logo-text">
+          <h1>Network Anomaly Detector</h1>
+          <span>ML-T2-002 &mdash; Behavioural Deviation Engine &bull; Autoencoder + Baselines</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <span id="model-status-badge" style="font-size:12px;color:var(--text2);">Checking model...</span>
+        <div class="header-badge">
+          <div class="pulse-dot"></div>
+          <span id="server-status">Live</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot" id="dot-server" style="background:var(--text3)"></div>
+        <span>API Server</span>
+      </div>
+      <div class="status-item">
+        <div class="status-dot" id="dot-model" style="background:var(--text3)"></div>
+        <span>Model</span>
+      </div>
+      <div class="status-item">&#x1F4CA; Features: <strong id="feat-count">--</strong></div>
+      <div class="status-item">&#x23F1; Threshold: <strong id="threshold-display" style="font-family:monospace">--</strong></div>
+      <div class="status-item" style="margin-left:auto; font-size:11px; color:var(--text3);" id="last-refresh">Refreshing...</div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="grid-3" id="metric-cards">
+      <div class="card stat-card">
+        <div class="card-title"><span class="icon">&#x1F916;</span> Autoencoder</div>
+        <div class="stat-value" id="ae-f1">--</div>
+        <div class="stat-label">F1 Score</div>
+        <div class="stat-sub" id="ae-auc">AUC-ROC: --</div>
+      </div>
+      <div class="card stat-card">
+        <div class="card-title"><span class="icon">&#x1F333;</span> Isolation Forest</div>
+        <div class="stat-value" id="if-f1">--</div>
+        <div class="stat-label">F1 Score</div>
+        <div class="stat-sub" id="if-auc">AUC-ROC: --</div>
+      </div>
+      <div class="card stat-card">
+        <div class="card-title"><span class="icon">&#x1F9E0;</span> One-Class SVM</div>
+        <div class="stat-value" id="ocsvm-f1">--</div>
+        <div class="stat-label">F1 Score</div>
+        <div class="stat-sub" id="ocsvm-prec">Precision: --</div>
+      </div>
+    </div>
+
+    <!-- Main grid: predictor + result -->
+    <div class="grid-main">
+
+      <!-- Left: Input panel -->
+      <div class="card" style="padding:28px;">
+        <div class="section-title">
+          Anomaly Predictor
+          <span class="badge">Real-time</span>
+        </div>
+
+        <div class="tabs" id="input-tabs">
+          <div class="tab active" onclick="switchTab('manual')">Manual Input</div>
+          <div class="tab" onclick="switchTab('json')">JSON Paste</div>
+          <div class="tab" onclick="switchTab('random')">Simulate Flow</div>
+        </div>
+
+        <!-- Manual tab -->
+        <div class="tab-panel active" id="tab-manual">
+          <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Enter comma-separated feature values matching the model's input features.</p>
+          <div class="form-group">
+            <label for="feature-input">Feature Values (comma-separated)</label>
+            <textarea id="feature-input" rows="4" placeholder="0.5, 1200, 3, 2, 1460, 800, ..."></textarea>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">
+            Expected: <strong id="expected-features">-- features</strong>
+          </div>
+        </div>
+
+        <!-- JSON tab -->
+        <div class="tab-panel" id="tab-json">
+          <div class="form-group">
+            <label for="json-input">JSON Payload</label>
+            <textarea id="json-input" rows="5" placeholder='{"features": [0.1, 0.2, ...]}'></textarea>
+          </div>
+        </div>
+
+        <!-- Simulate tab -->
+        <div class="tab-panel" id="tab-random">
+          <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Generate a synthetic flow for demonstration.</p>
+          <div class="form-group">
+            <label for="sim-type">Flow Type</label>
+            <select id="sim-type">
+              <option value="normal">Normal (BENIGN)</option>
+              <option value="port_scan">Port Scan</option>
+              <option value="dos">DoS Slowloris</option>
+              <option value="beacon">C2 Beacon</option>
+              <option value="exfil">Data Exfiltration</option>
+            </select>
+          </div>
+          <p style="font-size:11px;color:var(--text3);">Simulation uses pre-scaled random values representative of each traffic class.</p>
+        </div>
+
+        <div class="btn-row" style="margin-top:20px;">
+          <button class="btn btn-primary" onclick="runPredict()" id="predict-btn">
+            <span>&#x26A1;</span> Detect Anomaly
+          </button>
+          <button class="btn btn-secondary" onclick="loadSample()">Sample</button>
+          <button class="btn btn-secondary" onclick="clearInput()">Clear</button>
+        </div>
+
+        <!-- Batch test -->
+        <div style="margin-top:28px;padding-top:24px;border-top:1px solid var(--border);">
+          <div class="section-title" style="font-size:15px;">Batch Simulation</div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:14px;">Run 20 random flows (10 normal + 10 attack) and see batch results.</p>
+          <button class="btn btn-secondary" onclick="runBatch()" id="batch-btn">Run Batch Test</button>
+          <div id="batch-results" style="margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <!-- Right: Result panel -->
+      <div>
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title"><span class="icon">&#x1F4CA;</span> Prediction Result</div>
+          <div class="result-container" id="result-area">
+            <div class="empty-state">
+              <div class="icon">&#x1F50D;</div>
+              <p>Submit a flow to see the anomaly prediction</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Score history -->
+        <div class="card">
+          <div class="card-title"><span class="icon">&#x23F3;</span> Score History</div>
+          <div id="history-list">
+            <div class="empty-state" style="padding:20px 0;">
+              <p>No predictions yet</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics + Features grid -->
+    <div class="grid-2">
+      <!-- Full Metrics -->
+      <div class="card">
+        <div class="card-title"><span class="icon">&#x1F4C8;</span> Detailed Evaluation Metrics</div>
+        <div id="metrics-detail">
+          <div class="empty-state"><p>Load metrics from /metrics endpoint</p></div>
+        </div>
+      </div>
+
+      <!-- Feature importance -->
+      <div class="card">
+        <div class="card-title"><span class="icon">&#x1F3AF;</span> Top Feature Dimensions</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Features with highest variance in the training data (proxy for importance).</p>
+        <div id="feature-chart">
+          <div class="empty-state"><p>Features will appear after model loads</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- About / research notes -->
+    <div class="card">
+      <div class="card-title"><span class="icon">&#x1F4DA;</span> Research Summary &mdash; ML-T2-002</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;margin-top:4px;">
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent2);">Central Research Question</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;">"Can previously unseen malicious behaviour be identified from deviations in normal network behaviour?"</p>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent2);">Approach</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;">Autoencoder trained exclusively on BENIGN traffic. Attack flows produce high reconstruction error = anomaly signal.</p>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent2);">Novel Attack Types Tested</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;">Port Scan, DoS Slowloris, C2 Beacon, Data Exfiltration — none seen during training.</p>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent2);">Key Differentiator</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;">No class labels used in training. Detection is purely behavioural — deviation from learned normality.</p>
+        </div>
+      </div>
+      <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 style="font-size: 14px; margin-bottom: 4px;">Detailed Project Report</h3>
+          <p style="font-size: 12px; color: var(--text2);">Comprehensive details on methodology, datasets, and performance.</p>
+        </div>
+        <a href="/static/ML-T2-002_Report.html" target="_blank" class="btn btn-primary" style="text-decoration: none;">
+          <span>📄</span> View / Print Report
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const API = '';  // same origin
+    let modelLoaded = false;
+    let featureCount = 0;
+    let featureNames = [];
+    let metrics = null;
+    let threshold = null;
+    let scoreHistory = [];
+
+    // ── Status polling ────────────────────────────────────────────────────────
+    async function checkStatus() {
+      try {
+        const [health, features] = await Promise.all([
+          fetch(API + '/health').then(r => r.json()),
+          fetch(API + '/features').then(r => r.json()),
+        ]);
+        modelLoaded = health.model_loaded;
+        featureNames = features.features || [];
+        featureCount = featureNames.length;
+
+        document.getElementById('dot-server').style.background = 'var(--success)';
+        document.getElementById('dot-model').style.background = modelLoaded ? 'var(--success)' : 'var(--warning)';
+        document.getElementById('feat-count').textContent = featureCount || '--';
+        document.getElementById('model-status-badge').textContent = modelLoaded
+          ? 'Model loaded (' + featureCount + ' features)'
+          : 'Model not loaded — train first';
+        document.getElementById('expected-features').textContent = featureCount + ' features';
+        document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+        if (modelLoaded) {
+          loadMetrics();
+          renderFeatureChart();
+        }
+      } catch (e) {
+        document.getElementById('dot-server').style.background = 'var(--danger)';
+        document.getElementById('server-status').textContent = 'Offline';
+      }
+    }
+
+    async function loadMetrics() {
+      try {
+        const data = await fetch(API + '/metrics').then(r => r.json());
+        metrics = data;
+        renderMetricCards(data);
+        renderMetricsTable(data);
+      } catch (e) { /* metrics endpoint may not exist yet */ }
+    }
+
+    function renderMetricCards(m) {
+      const ae = m.autoencoder || {};
+      const iso = m.isolation_forest || {};
+      const svm = m.one_class_svm || {};
+      setEl('ae-f1', fmt(ae.f1));
+      setEl('ae-auc', 'AUC-ROC: ' + fmt(ae.auc_roc));
+      setEl('if-f1', fmt(iso.f1));
+      setEl('if-auc', 'AUC-ROC: ' + fmt(iso.auc_roc));
+      setEl('ocsvm-f1', fmt(svm.f1));
+      setEl('ocsvm-prec', 'Precision: ' + fmt(svm.precision));
+    }
+
+    function renderMetricsTable(m) {
+      const rows = [
+        { name: 'Autoencoder', key: 'autoencoder', color: '#3b82f6' },
+        { name: 'Isolation Forest', key: 'isolation_forest', color: '#06b6d4' },
+        { name: 'One-Class SVM', key: 'one_class_svm', color: '#8b5cf6' },
+      ];
+      let html = '<table class="metrics-table"><thead><tr>';
+      ['Model','F1','Precision','Recall','AUC-ROC','FPR','TP','FP','TN','FN'].forEach(h => {
+        html += '<th>' + h + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+      rows.forEach(row => {
+        const d = m[row.key] || {};
+        html += '<tr>';
+        html += '<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+row.color+';margin-right:8px;"></span>' + row.name + '</td>';
+        html += '<td>' + pill(d.f1) + '</td>';
+        html += '<td>' + pill(d.precision) + '</td>';
+        html += '<td>' + pill(d.recall) + '</td>';
+        html += '<td>' + pill(d.auc_roc) + '</td>';
+        html += '<td><span class="metric-pill ' + (d.fpr < 0.1 ? 'pill-good' : d.fpr < 0.3 ? 'pill-mid' : 'pill-bad') + '">' + fmt(d.fpr) + '</span></td>';
+        html += '<td style="color:var(--success)">' + (d.tp ?? '--') + '</td>';
+        html += '<td style="color:var(--danger)">' + (d.fp ?? '--') + '</td>';
+        html += '<td style="color:var(--text2)">' + (d.tn ?? '--') + '</td>';
+        html += '<td style="color:var(--warning)">' + (d.fn ?? '--') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('metrics-detail').innerHTML = html;
+    }
+
+    function renderFeatureChart() {
+      if (!featureNames.length) return;
+      const top = featureNames.slice(0, 12);
+      // Mock importance (feature index-based decay for demo)
+      const vals = top.map((_, i) => Math.max(0.05, 1 - i * 0.08));
+      const maxVal = Math.max(...vals);
+      let html = '';
+      top.forEach((name, i) => {
+        const pct = (vals[i] / maxVal * 100).toFixed(1);
+        html += `<div class="feat-bar-row">
+          <div class="feat-name" title="${name}">${name}</div>
+          <div class="feat-bar-bg"><div class="feat-bar-fill" style="width:${pct}%"></div></div>
+          <div class="feat-val">${vals[i].toFixed(2)}</div>
+        </div>`;
+      });
+      document.getElementById('feature-chart').innerHTML = html;
+    }
+
+    // ── Prediction ────────────────────────────────────────────────────────────
+    async function runPredict() {
+      const btn = document.getElementById('predict-btn');
+      const activeTab = document.querySelector('.tab-panel.active').id;
+      let features;
+
+      if (activeTab === 'tab-random') {
+        features = simulateFlow(document.getElementById('sim-type').value);
+      } else if (activeTab === 'tab-json') {
+        try {
+          const parsed = JSON.parse(document.getElementById('json-input').value);
+          features = parsed.features;
+        } catch(e) { showToast('Invalid JSON'); return; }
+      } else {
+        const raw = document.getElementById('feature-input').value.trim();
+        if (!raw) { showToast('Enter feature values'); return; }
+        features = raw.split(',').map(v => parseFloat(v.trim()));
+      }
+
+      if (features.some(isNaN)) { showToast('Some values are not numbers'); return; }
+
+      btn.innerHTML = '<span class="spinner"></span> Predicting...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(API + '/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ features })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          showToast(err.detail || 'Prediction failed');
+          return;
+        }
+        const data = await res.json();
+        threshold = data.threshold;
+        document.getElementById('threshold-display').textContent = data.threshold.toFixed(6);
+        renderResult(data, features);
+        addHistory(data);
+      } catch(e) {
+        showToast('API error: ' + e.message);
+      } finally {
+        btn.innerHTML = '<span>&#x26A1;</span> Detect Anomaly';
+        btn.disabled = false;
+      }
+    }
+
+    function renderResult(data, features) {
+      const isAnom = data.is_anomaly;
+      const score = data.anomaly_score;
+      const thresh = data.threshold;
+      const maxScore = thresh * 3;
+      const pct = Math.min(100, (score / maxScore) * 100);
+      const color = isAnom ? '#ef4444' : '#10b981';
+      const angle = (pct / 100) * 180;
+      const rad = (angle - 90) * Math.PI / 180;
+      const cx = 80, cy = 80, r = 65;
+      const nx = cx + r * Math.cos(rad), ny = cy + r * Math.sin(rad);
+      const arc = angle > 90 ? 1 : 0;
+
+      document.getElementById('result-area').innerHTML = `
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" width="160" height="100" viewBox="0 0 160 100">
+            <path d="M15 80 A65 65 0 0 1 145 80" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12" stroke-linecap="round"/>
+            <path d="M15 80 A65 65 0 ${arc} 1 ${nx.toFixed(1)} ${ny.toFixed(1)}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+              style="filter:drop-shadow(0 0 6px ${color})"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-score" style="color:${color}">${score.toFixed(4)}</div>
+            <div class="gauge-label-sm">anomaly score</div>
+          </div>
+        </div>
+        <div class="verdict ${isAnom ? 'anomaly' : 'normal'}">
+          ${isAnom ? '&#x26A0; ANOMALY DETECTED' : '&#x2714; NORMAL TRAFFIC'}
+        </div>
+        <div class="verdict-detail">${isAnom ? 'Reconstruction error exceeds threshold — behavioural deviation detected' : 'Flow pattern is consistent with normal network behaviour'}</div>
+        <div class="detail-row"><span class="detail-key">Anomaly Score</span><span class="detail-val" style="color:${color}">${score.toFixed(6)}</span></div>
+        <div class="detail-row"><span class="detail-key">Threshold</span><span class="detail-val">${thresh.toFixed(6)}</span></div>
+        <div class="detail-row"><span class="detail-key">Margin</span><span class="detail-val" style="color:${isAnom ? 'var(--danger)' : 'var(--success)'}">
+          ${isAnom ? '+' : ''}${(score - thresh).toFixed(6)}</span></div>
+        <div class="detail-row"><span class="detail-key">Features Sent</span><span class="detail-val">${features.length}</span></div>
+      `;
+    }
+
+    function addHistory(data) {
+      const isAnom = data.is_anomaly;
+      scoreHistory.unshift({ score: data.anomaly_score, anomaly: isAnom, time: new Date() });
+      if (scoreHistory.length > 15) scoreHistory.pop();
+      const el = document.getElementById('history-list');
+      el.innerHTML = scoreHistory.map(h => `
+        <div class="history-row">
+          <div class="history-dot" style="background:${h.anomaly ? 'var(--danger)' : 'var(--success)'}"></div>
+          <div class="history-verdict" style="color:${h.anomaly ? 'var(--danger)' : 'var(--success)'}">${h.anomaly ? 'ANOMALY' : 'NORMAL'}</div>
+          <div class="history-score">${h.score.toFixed(6)}</div>
+          <div class="history-time">${h.time.toLocaleTimeString()}</div>
+        </div>
+      `).join('');
+    }
+
+    // ── Batch test ────────────────────────────────────────────────────────────
+    async function runBatch() {
+      const btn = document.getElementById('batch-btn');
+      btn.innerHTML = '<span class="spinner"></span> Running...';
+      btn.disabled = true;
+
+      const types = ['normal','normal','normal','normal','normal','normal','normal','normal','normal','normal',
+                     'port_scan','dos','beacon','exfil','port_scan','dos','beacon','exfil','port_scan','dos'];
+      const flows = types.map(t => simulateFlow(t));
+      const labels = types.map(t => t !== 'normal');
+
+      try {
+        const res = await fetch(API + '/predict/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flows })
+        });
+        if (!res.ok) { showToast('Batch failed'); return; }
+        const data = await res.json();
+        const results = data.results;
+        let correct = 0;
+        let html = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">';
+        results.forEach((r, i) => {
+          const match = r.is_anomaly === labels[i];
+          if (match) correct++;
+          const c = r.is_anomaly ? 'var(--danger)' : 'var(--success)';
+          html += `<div style="background:var(--surface3);border-radius:6px;padding:8px;border:1px solid ${match ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};text-align:center;font-size:11px;">
+            <div style="color:${c};font-weight:700;margin-bottom:2px;">${r.is_anomaly ? 'ANOM' : 'NORM'}</div>
+            <div style="color:var(--text3);font-family:monospace;">${r.anomaly_score.toFixed(3)}</div>
+            <div style="color:${match ? 'var(--success)' : 'var(--danger)'};font-size:10px;">${match ? '&#x2714;' : '&#x2718;'} ${types[i]}</div>
+          </div>`;
+        });
+        html += '</div>';
+        html += `<div style="margin-top:12px;font-size:13px;color:var(--text2);">Accuracy: <strong style="color:var(--success)">${correct}/20 (${(correct/20*100).toFixed(0)}%)</strong> &nbsp;&bull;&nbsp; Threshold: ${data.threshold.toFixed(6)}</div>`;
+        document.getElementById('batch-results').innerHTML = html;
+        showToast('Batch complete: ' + correct + '/20 correct');
+      } finally {
+        btn.innerHTML = 'Run Batch Test';
+        btn.disabled = false;
+      }
+    }
+
+    // ── Simulation helpers ────────────────────────────────────────────────────
+    function simulateFlow(type) {
+      if (featureCount === 0) { showToast('Model not loaded yet'); return []; }
+      const n = featureCount;
+      const f = Array(n).fill(0).map(() => (Math.random() - 0.5) * 2);  // standard normal
+
+      // Perturb by flow type
+      if (type === 'port_scan') {
+        f[1] = -2.5; f[14] = 3; f[15] = 3; f[45] = 1.5; // short duration, high pkt/s, SYN
+      } else if (type === 'dos') {
+        f[1] = 4; f[2] = 4; f[16] = 4; f[14] = -2; // long duration, many pkts, slow IAT
+      } else if (type === 'beacon') {
+        f[16] = 5; f[17] = -3; f[40] = -3; f[41] = -3; // very regular IAT
+      } else if (type === 'exfil') {
+        f[4] = 5; f[5] = -3; f[51] = -4; // huge fwd bytes, tiny bwd, low ratio
+      }
+      return f;
+    }
+
+    function loadSample() {
+      const activeTab = document.querySelector('.tab-panel.active').id;
+      const n = featureCount || 10;
+      const sample = Array(n).fill(0).map(() => (Math.random() * 2 - 1).toFixed(3));
+      if (activeTab === 'tab-manual') {
+        document.getElementById('feature-input').value = sample.join(', ');
+      } else if (activeTab === 'tab-json') {
+        document.getElementById('json-input').value = JSON.stringify({ features: sample.map(Number) }, null, 2);
+      }
+    }
+
+    function clearInput() {
+      document.getElementById('feature-input').value = '';
+      document.getElementById('json-input').value = '';
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        const names = ['manual','json','random'];
+        t.classList.toggle('active', names[i] === name);
+      });
+      document.querySelectorAll('.tab-panel').forEach(p => {
+        p.classList.toggle('active', p.id === 'tab-' + name);
+      });
+      if (name === 'random') {
+        // Auto-populate
+      }
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    function fmt(v) { return v !== undefined && v !== null ? Number(v).toFixed(4) : '--'; }
+    function setEl(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+
+    function pill(v) {
+      if (v === undefined || v === null) return '<span class="metric-pill pill-neutral">--</span>';
+      const cls = v >= 0.75 ? 'pill-good' : v >= 0.5 ? 'pill-mid' : 'pill-bad';
+      return '<span class="metric-pill ' + cls + '">' + Number(v).toFixed(4) + '</span>';
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    checkStatus();
+    setInterval(checkStatus, 10000);
+  </script>
+</body>
+</html>

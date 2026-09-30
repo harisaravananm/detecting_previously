@@ -1,0 +1,37 @@
+# config.yaml — Hyperparameters and paths for ML-T2-002
+
+dataset:
+  type: cicids           # cicids | unsw | nslkdd
+  train_path: data/train.csv
+  test_path: data/test.csv
+
+preprocessing:
+  variance_threshold: 0.01
+  scaler: standard       # standard | minmax
+
+autoencoder:
+  encoding_dims: [64, 32, 16]
+  epochs: 50
+  batch_size: 256
+  lr: 0.001
+  threshold_percentile: 95.0
+
+baselines:
+  run: true
+  isolation_forest:
+    n_estimators: 100
+    contamination: 0.05
+  one_class_svm:
+    nu: 0.05
+    kernel: rbf
+    gamma: scale
+    subsample: 5000       # use subsample for speed
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  model_path: artifacts/model.pt
+  meta_path: artifacts/meta.json
+
+artifacts:
+  output_dir: artifacts
